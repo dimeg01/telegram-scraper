@@ -1,0 +1,8 @@
+{
+  "site": "https://www.reklama5.mk/Search?q=",
+  "keywords": [
+    "tipo"
+  ],
+  "telegram_bot_token": "BOT_TOKEN",
+  "telegram_chat_id": "CHAT_ID"
+}
