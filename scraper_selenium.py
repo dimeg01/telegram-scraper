@@ -29,7 +29,11 @@ options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) "
                      "Chrome/120.0.0.0 Safari/537.36")
 
-driver = webdriver.Chrome(options=options)
+from selenium.webdriver.chrome.service import Service
+
+chrome_path = "/usr/bin/chromium-browser"  # или "/usr/bin/chromium"
+service = Service(chrome_path)
+driver = webdriver.Chrome(service=service, options=options)
 
 results = []
 
