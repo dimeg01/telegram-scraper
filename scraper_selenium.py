@@ -1,7 +1,6 @@
 import os
 import json
 import requests
-from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -9,7 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import chromedriver_autoinstaller
 
-# Автоматски инсталира точен chromedriver
+# Автоматски инсталира точниот ChromeDriver
 chromedriver_autoinstaller.install()
 
 # Load config
@@ -17,7 +16,7 @@ with open("config.json") as f:
     config = json.load(f)
 
 SITE = config["site"]            # пример: "https://www.reklama5.mk/Search?q="
-KEYWORDS = config["keywords"]    # пример: ["tipo","iphone"]
+KEYWORDS = config["keywords"]    # пример: ["tipo", "iphone"]
 
 # Telegram secrets од env
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -43,31 +42,26 @@ for keyword in KEYWORDS:
     print(f"\nSearching keyword: {keyword} -> {url}")
     driver.get(url)
 
-    # Чека до 10 секунди да се load-ираат огласите
+    # Чека до 20 секунди да се load-ираат огласите
     try:
-        WebDriverWait(driver, 10).until(
+        WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, ".announcement__body"))
         )
     except:
-        print("No ads found after waiting 10s")
+        print("No ads found after waiting 20s")
 
-    soup = BeautifulSoup(driver.page_source, "html.parser")
-    ads = soup.select(".announcement__body")
+    ads = driver.find_elements(By.CSS_SELECTOR, ".announcement__body")
     print(f"Found {len(ads)} ads")
 
     for ad in ads:
-        title_tag = ad.select_one(".announcement__title")
-        price_tag = ad.select_one(".announcement__price")
-        link_tag = ad.select_one("a.announcement__link")
-        date_tag = ad.select_one(".announcement__date")
-
-        if not title_tag or not link_tag or not date_tag:
+        try:
+            title = ad.find_element(By.CSS_SELECTOR, ".announcement__title").text.strip()
+            price_el = ad.find_elements(By.CSS_SELECTOR, ".announcement__price")
+            price = price_el[0].text.strip() if price_el else "N/A"
+            link = ad.find_element(By.CSS_SELECTOR, "a.announcement__link").get_attribute("href")
+            date_text = ad.find_element(By.CSS_SELECTOR, ".announcement__date").text.strip()
+        except:
             continue
-
-        title = title_tag.text.strip()
-        price = price_tag.text.strip() if price_tag else "N/A"
-        link = "https://www.reklama5.mk" + link_tag.get("href")
-        date_text = date_tag.text.strip()
 
         # Филтрира само огласи од последни 24h
         if "денес" in date_text.lower() or "час" in date_text.lower():
