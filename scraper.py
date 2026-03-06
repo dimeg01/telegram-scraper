@@ -9,22 +9,29 @@ with open("config.json") as f:
 
 SITE = config["site"]
 KEYWORDS = config["keywords"]
-TOKEN = config["telegram_bot_token"]
-CHAT_ID = config["telegram_chat_id"]
 
+print("Starting Reklama5 scraper test...")
 results = []
 
 for keyword in KEYWORDS:
-
+    print("\nSearching keyword:", keyword)
     url = SITE + keyword
+    print("URL:", url)
+
     r = requests.get(url)
+    print("Status code:", r.status_code)
+
+    if r.status_code != 200:
+        print("Failed to fetch page!")
+        continue
+
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # Tочен селектор за Reklama5 огласи
+    # CSS селектор за огласите
     ads = soup.select(".announcement__body")
+    print("Found ads:", len(ads))
 
     for ad in ads:
-
         title_tag = ad.select_one(".announcement__title")
         price_tag = ad.select_one(".announcement__price")
         link_tag = ad.select_one("a.announcement__link")
@@ -45,9 +52,7 @@ for keyword in KEYWORDS:
                 "price": price,
                 "link": link
             })
+            print(f"Title: {title}\nPrice: {price}\nLink: {link}\n---")
 
-# Испрати на Telegram
-for r in results:
-    message = f"{r['title']}\nЦена: {r['price']}\n{r['link']}"
-    telegram_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(telegram_url, data={"chat_id": CHAT_ID, "text": message})
+print("\nScraper test finished.")
+print(f"Total ads found in last 24h: {len(results)}")
