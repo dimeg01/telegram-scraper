@@ -1,7 +1,8 @@
 import json
-import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from datetime import datetime
 
 # Load config
 with open("config.json") as f:
@@ -9,25 +10,33 @@ with open("config.json") as f:
 
 SITE = config["site"]
 KEYWORDS = config["keywords"]
+TOKEN = config.get("telegram_bot_token")
+CHAT_ID = config.get("telegram_chat_id")
 
-print("Starting Reklama5 scraper test...")
+# Setup headless Chrome
+options = Options()
+options.headless = True
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-gpu")
+options.add_argument("window-size=1920,1080")
+options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                     "AppleWebKit/537.36 (KHTML, like Gecko) "
+                     "Chrome/120.0.0.0 Safari/537.36")
+
+driver = webdriver.Chrome(options=options)
+
 results = []
 
 for keyword in KEYWORDS:
-    print("\nSearching keyword:", keyword)
+    print(f"\nSearching keyword: {keyword}")
     url = SITE + keyword
     print("URL:", url)
 
-    r = requests.get(url)
-    print("Status code:", r.status_code)
+    driver.get(url)
+    html = driver.page_source
+    soup = BeautifulSoup(html, "html.parser")
 
-    if r.status_code != 200:
-        print("Failed to fetch page!")
-        continue
-
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    # CSS селектор за огласите
     ads = soup.select(".announcement__body")
     print("Found ads:", len(ads))
 
@@ -45,7 +54,7 @@ for keyword in KEYWORDS:
         link = "https://www.reklama5.mk" + link_tag.get("href")
         date_text = date_tag.text.strip()
 
-        # Филтер за последни 24 часа
+        # Filter only last 24h (денес/час)
         if "денес" in date_text.lower() or "час" in date_text.lower():
             results.append({
                 "title": title,
@@ -54,5 +63,14 @@ for keyword in KEYWORDS:
             })
             print(f"Title: {title}\nPrice: {price}\nLink: {link}\n---")
 
-print("\nScraper test finished.")
-print(f"Total ads found in last 24h: {len(results)}")
+driver.quit()
+
+# Send Telegram messages if token & chat_id exist
+if TOKEN and CHAT_ID:
+    import requests
+    for r in results:
+        message = f"{r['title']}\nЦена: {r['price']}\n{r['link']}"
+        telegram_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        requests.post(telegram_url, data={"chat_id": CHAT_ID, "text": message})
+
+print(f"\nScraper finished. Total ads found in last 24h: {len(results)}")
