@@ -4,26 +4,30 @@ import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import chromedriver_autoinstaller
 
-# Install correct chromedriver
+# Автоматски инсталира точен chromedriver
 chromedriver_autoinstaller.install()
 
 # Load config
 with open("config.json") as f:
     config = json.load(f)
 
-SITE = config["site"]
-KEYWORDS = config["keywords"]
+SITE = config["site"]            # пример: "https://www.reklama5.mk/Search?q="
+KEYWORDS = config["keywords"]    # пример: ["tipo","iphone"]
 
-# Telegram
+# Telegram secrets од env
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-print("Starting Reklama5 scraper...")
+print("Starting Reklama5 Selenium scraper...")
 
+# Headless Chrome options
 options = Options()
-options.add_argument("--headless=new")   # headless Chrome
+options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--disable-gpu")
@@ -32,15 +36,22 @@ options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 driver = webdriver.Chrome(options=options)
-
 results = []
 
 for keyword in KEYWORDS:
     url = SITE + keyword
-    print(f"Searching: {keyword} -> {url}")
+    print(f"\nSearching keyword: {keyword} -> {url}")
     driver.get(url)
-    soup = BeautifulSoup(driver.page_source, "html.parser")
 
+    # Чека до 10 секунди да се load-ираат огласите
+    try:
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".announcement__body"))
+        )
+    except:
+        print("No ads found after waiting 10s")
+
+    soup = BeautifulSoup(driver.page_source, "html.parser")
     ads = soup.select(".announcement__body")
     print(f"Found {len(ads)} ads")
 
@@ -58,17 +69,20 @@ for keyword in KEYWORDS:
         link = "https://www.reklama5.mk" + link_tag.get("href")
         date_text = date_tag.text.strip()
 
+        # Филтрира само огласи од последни 24h
         if "денес" in date_text.lower() or "час" in date_text.lower():
             results.append({"title": title, "price": price, "link": link})
             print(f"{title} | {price} | {link}")
 
 driver.quit()
 
-# Send Telegram
+# Испрати Telegram пораки ако има резултати
 if TOKEN and CHAT_ID and results:
     for r in results:
         message = f"{r['title']}\nЦена: {r['price']}\n{r['link']}"
-        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-                      data={"chat_id": CHAT_ID, "text": message})
+        requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={"chat_id": CHAT_ID, "text": message}
+        )
 
-print(f"Scraper finished. Total ads: {len(results)}")
+print(f"\nScraper finished. Total ads found in last 24h: {len(results)}")
