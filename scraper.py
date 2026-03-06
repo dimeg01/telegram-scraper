@@ -1,7 +1,7 @@
 import requests
 
-TOKEN = "BOT_TOKEN"
-CHAT_ID = "CHAT_ID"
+TOKEN = "8298983737:AAFBf4RUsED0dXjhOyeRlTNjj0W4hkMRrlM"
+CHAT_ID = "528508377"
 
 message = "Test message from GitHub Actions"
 
