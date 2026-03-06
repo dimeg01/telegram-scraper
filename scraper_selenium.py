@@ -1,17 +1,22 @@
+import os
 import json
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from datetime import datetime
 
-# Load config
+# Load config (само keywords и site, токени ќе се читаат од env)
 with open("config.json") as f:
     config = json.load(f)
 
 SITE = config["site"]
 KEYWORDS = config["keywords"]
-TOKEN = config.get("telegram_bot_token")
-CHAT_ID = config.get("telegram_chat_id")
+
+# Telegram secrets од env
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+print("Starting Reklama5 Selenium scraper...")
 
 # Setup headless Chrome
 options = Options()
@@ -37,6 +42,7 @@ for keyword in KEYWORDS:
     html = driver.page_source
     soup = BeautifulSoup(html, "html.parser")
 
+    # CSS селектор за Reklama5 огласи
     ads = soup.select(".announcement__body")
     print("Found ads:", len(ads))
 
@@ -65,12 +71,13 @@ for keyword in KEYWORDS:
 
 driver.quit()
 
-# Send Telegram messages if token & chat_id exist
-if TOKEN and CHAT_ID:
+# Send Telegram messages if TOKEN and CHAT_ID exist
+if TOKEN and CHAT_ID and results:
     import requests
     for r in results:
         message = f"{r['title']}\nЦена: {r['price']}\n{r['link']}"
         telegram_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(telegram_url, data={"chat_id": CHAT_ID, "text": message})
+        resp = requests.post(telegram_url, data={"chat_id": CHAT_ID, "text": message})
+        print("Telegram response:", resp.text)
 
 print(f"\nScraper finished. Total ads found in last 24h: {len(results)}")
