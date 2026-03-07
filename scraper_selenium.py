@@ -15,14 +15,14 @@ chromedriver_autoinstaller.install()
 with open("config.json") as f:
     config = json.load(f)
 
-SITE = config["site"]            # пример: "https://www.reklama5.mk/Search?q="
-KEYWORDS = config["keywords"]    # пример: ["tipo", "iphone"]
+SITES = config["sites"]           # Листа од сајтови
+KEYWORDS = config["keywords"]     # Листа од keywords
 
 # Telegram secrets од env
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", config.get("telegram_bot_token"))
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", config.get("telegram_chat_id"))
 
-print("Starting Reklama5 Selenium scraper...")
+print("Starting multi-site Selenium scraper...")
 
 # Headless Chrome options
 options = Options()
@@ -31,42 +31,49 @@ options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--disable-gpu")
 options.add_argument("window-size=1920,1080")
-options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+options.add_argument(
+    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 driver = webdriver.Chrome(options=options)
 results = []
 
-for keyword in KEYWORDS:
-    url = SITE + keyword
-    print(f"\nSearching keyword: {keyword} -> {url}")
-    driver.get(url)
+# -----------------------
+# Scraping loop
+# -----------------------
+for site in SITES:
+    for keyword in KEYWORDS:
 
-    # Чека до 20 секунди да се load-ираат огласите
-    try:
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".announcement__body"))
-        )
-    except:
-        print("No ads found after waiting 20s")
+        url = site + keyword
+        print(f"\nSearching keyword: {keyword} -> {url}")
+        driver.get(url)
 
-    ads = driver.find_elements(By.CSS_SELECTOR, ".announcement__body")
-    print(f"Found {len(ads)} ads")
-
-    for ad in ads:
+        # Чека до 20 секунди да се load-ираат огласите
         try:
-            title = ad.find_element(By.CSS_SELECTOR, ".announcement__title").text.strip()
-            price_el = ad.find_elements(By.CSS_SELECTOR, ".announcement__price")
-            price = price_el[0].text.strip() if price_el else "N/A"
-            link = ad.find_element(By.CSS_SELECTOR, "a.announcement__link").get_attribute("href")
-            date_text = ad.find_element(By.CSS_SELECTOR, ".announcement__date").text.strip()
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".announcement__body"))
+            )
         except:
-            continue
+            print("No ads found after waiting 20s")
 
-        # Филтрира само огласи од последни 24h
-        if "денес" in date_text.lower() or "час" in date_text.lower():
-            results.append({"title": title, "price": price, "link": link})
-            print(f"{title} | {price} | {link}")
+        ads = driver.find_elements(By.CSS_SELECTOR, ".announcement__body")
+        print(f"Found {len(ads)} ads")
+
+        for ad in ads:
+            try:
+                title = ad.find_element(By.CSS_SELECTOR, ".announcement__title").text.strip()
+                price_el = ad.find_elements(By.CSS_SELECTOR, ".announcement__price")
+                price = price_el[0].text.strip() if price_el else "N/A"
+                link = ad.find_element(By.CSS_SELECTOR, "a.announcement__link").get_attribute("href")
+                date_text = ad.find_element(By.CSS_SELECTOR, ".announcement__date").text.strip()
+            except:
+                continue
+
+            # Филтрира само огласи од последни 24h
+            if "денес" in date_text.lower() or "час" in date_text.lower():
+                results.append({"title": title, "price": price, "link": link})
+                print(f"{title} | {price} | {link}")
 
 driver.quit()
 
