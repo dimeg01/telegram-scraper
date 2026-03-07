@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import time
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -9,47 +10,45 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import chromedriver_autoinstaller
 
-# Автоматски инсталира точниот ChromeDriver
 chromedriver_autoinstaller.install()
 
 # Load config
 with open("config.json") as f:
     config = json.load(f)
 
-SITES = config["sites"]
-KEYWORDS = config["keywords"]
+SITES = config.get("sites", [])
+KEYWORDS = config.get("keywords", [])
 
-# Telegram secrets од env
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", config.get("telegram_bot_token"))
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", config.get("telegram_chat_id"))
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or config.get("telegram_bot_token")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") or config.get("telegram_chat_id")
 
-# -----------------------
-# Telegram sender
-# -----------------------
 def send_telegram(msg):
-    if TOKEN and CHAT_ID:
-        requests.post(
+    if not TOKEN or not CHAT_ID:
+        print("⚠️ Telegram token/chat_id missing!")
+        return
+
+    try:
+        response = requests.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={"chat_id": CHAT_ID, "text": msg}
         )
+        print("Telegram Response:", response.status_code, response.text)
+    except Exception as e:
+        print("Telegram Error:", e)
 
-# -----------------------
-# Испрати почетна порака
-# -----------------------
+# ➤ Send start message
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 start_msg = (
-    f"🚀 Scraper activated!\n"
-    f"Time: {now}\n"
-    f"Sites: {len(SITES)}\n"
-    f"Keywords: {len(KEYWORDS)}"
+    f"🚀 Scraper *started*\n"
+    f"🕒 Time: {now}\n"
+    f"🌐 Sites: {len(SITES)}\n"
+    f"🔍 Keywords: {len(KEYWORDS)}"
 )
 send_telegram(start_msg)
 
-print("Starting multi-site Selenium scraper...")
+print("🔎 Starting multi‑site Selenium scraper...")
 
-# -----------------------
-# Selenium setup
-# -----------------------
+# Selenium options
 options = Options()
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
@@ -64,48 +63,46 @@ options.add_argument(
 driver = webdriver.Chrome(options=options)
 results = []
 
-# -----------------------
-# Scraping loop
-# -----------------------
 for site in SITES:
     for keyword in KEYWORDS:
-
         url = site + keyword
-        print(f"\nSearching keyword: {keyword} -> {url}")
+        print(f"\n🔍 Searching '{keyword}' on {site}")
+        print("URL:", url)
+
         driver.get(url)
 
-        # Чека до 20 секунди да се load-ираат огласите
+        # Optional wait – not a guarantee
         try:
-            WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".announcement__body"))
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_all_elements_located((By.TAG_NAME, "a"))
             )
         except:
-            print("No ads found after waiting 20s")
+            print("⚠️ Wait timed out")
 
-        ads = driver.find_elements(By.CSS_SELECTOR, ".announcement__body")
-        print(f"Found {len(ads)} ads")
+        links = driver.find_elements(By.TAG_NAME, "a")
+        found = 0
 
-        for ad in ads:
-            try:
-                title = ad.find_element(By.CSS_SELECTOR, ".announcement__title").text.strip()
-                price_el = ad.find_elements(By.CSS_SELECTOR, ".announcement__price")
-                price = price_el[0].text.strip() if price_el else "N/A"
-                link = ad.find_element(By.CSS_SELECTOR, "a.announcement__link").get_attribute("href")
-                date_text = ad.find_element(By.CSS_SELECTOR, ".announcement__date").text.strip()
-            except:
-                continue
+        for link_el in links:
+            text = link_el.text or ""
+            href = link_el.get_attribute("href") or ""
 
-            # Филтрира само огласи од последни 24h
-            if "денес" in date_text.lower() or "час" in date_text.lower():
-                results.append({"title": title, "price": price, "link": link})
-                print(f"{title} | {price} | {link}")
+            if keyword.lower() in text.lower() and href.startswith("http"):
+                msg = f"{text}\n{href}"
+                results.append({"text": text, "link": href})
+                print("✔ Found:", text)
+                found += 1
+
+                # Optional: send as you find
+                send_telegram(f"🔎 {keyword}\n{text}\n{href}")
+
+        print(f"📊 Found {found} matches on this search")
 
 driver.quit()
 
-# Испрати Telegram пораки ако има резултати
-if results:
-    for r in results:
-        message = f"{r['title']}\nЦена: {r['price']}\n{r['link']}"
-        send_telegram(message)
+print("\n📤 Summary")
+print("Total matches found:", len(results))
+if len(results) == 0:
+    send_telegram("⚠️ No results found on this run.")
 
-print(f"\nScraper finished. Total ads found in last 24h: {len(results)}")
+else:
+    send_telegram(f"✅ Scraper finished with {len(results)} results.")
