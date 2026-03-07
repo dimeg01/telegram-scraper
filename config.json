@@ -1,7 +1,5 @@
 {
-  "sites": [
-    "https://www.reklama5.mk/Search?q="
-  ],
+  "site": "https://www.reklama5.mk/Search?q=",
   "keywords": [
     "tipo"
   ],
