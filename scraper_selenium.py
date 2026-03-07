@@ -1,7 +1,6 @@
 import os
 import json
 import requests
-import time
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -26,29 +25,21 @@ def send_telegram(msg):
     if not TOKEN or not CHAT_ID:
         print("⚠️ Telegram token/chat_id missing!")
         return
-
     try:
-        response = requests.post(
+        r = requests.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={"chat_id": CHAT_ID, "text": msg}
         )
-        print("Telegram Response:", response.status_code, response.text)
+        print("Telegram Response:", r.status_code)
     except Exception as e:
         print("Telegram Error:", e)
 
-# ➤ Send start message
+# Send start message
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-start_msg = (
-    f"🚀 Scraper *started*\n"
-    f"🕒 Time: {now}\n"
-    f"🌐 Sites: {len(SITES)}\n"
-    f"🔍 Keywords: {len(KEYWORDS)}"
-)
+start_msg = f"🚀 Scraper activated!\nTime: {now}\nSites: {len(SITES)}\nKeywords: {len(KEYWORDS)}"
 send_telegram(start_msg)
 
-print("🔎 Starting multi‑site Selenium scraper...")
-
-# Selenium options
+# Selenium setup
 options = Options()
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
@@ -63,15 +54,14 @@ options.add_argument(
 driver = webdriver.Chrome(options=options)
 results = []
 
+MAX_ADS_PER_SITE = 5  # <-- limit to 5 ads per site
+
 for site in SITES:
     for keyword in KEYWORDS:
         url = site + keyword
-        print(f"\n🔍 Searching '{keyword}' on {site}")
-        print("URL:", url)
-
+        print(f"\nSearching '{keyword}' on {site}")
         driver.get(url)
 
-        # Optional wait – not a guarantee
         try:
             WebDriverWait(driver, 15).until(
                 EC.presence_of_all_elements_located((By.TAG_NAME, "a"))
@@ -87,13 +77,13 @@ for site in SITES:
             href = link_el.get_attribute("href") or ""
 
             if keyword.lower() in text.lower() and href.startswith("http"):
-                msg = f"{text}\n{href}"
                 results.append({"text": text, "link": href})
-                print("✔ Found:", text)
                 found += 1
-
-                # Optional: send as you find
+                # Send Telegram immediately
                 send_telegram(f"🔎 {keyword}\n{text}\n{href}")
+
+                if found >= MAX_ADS_PER_SITE:  # stop after 5 ads
+                    break
 
         print(f"📊 Found {found} matches on this search")
 
@@ -103,6 +93,5 @@ print("\n📤 Summary")
 print("Total matches found:", len(results))
 if len(results) == 0:
     send_telegram("⚠️ No results found on this run.")
-
 else:
     send_telegram(f"✅ Scraper finished with {len(results)} results.")
