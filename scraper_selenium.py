@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -15,16 +16,40 @@ chromedriver_autoinstaller.install()
 with open("config.json") as f:
     config = json.load(f)
 
-SITES = config["sites"]           # Листа од сајтови
-KEYWORDS = config["keywords"]     # Листа од keywords
+SITES = config["sites"]
+KEYWORDS = config["keywords"]
 
 # Telegram secrets од env
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", config.get("telegram_bot_token"))
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", config.get("telegram_chat_id"))
 
+# -----------------------
+# Telegram sender
+# -----------------------
+def send_telegram(msg):
+    if TOKEN and CHAT_ID:
+        requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={"chat_id": CHAT_ID, "text": msg}
+        )
+
+# -----------------------
+# Испрати почетна порака
+# -----------------------
+now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+start_msg = (
+    f"🚀 Scraper activated!\n"
+    f"Time: {now}\n"
+    f"Sites: {len(SITES)}\n"
+    f"Keywords: {len(KEYWORDS)}"
+)
+send_telegram(start_msg)
+
 print("Starting multi-site Selenium scraper...")
 
-# Headless Chrome options
+# -----------------------
+# Selenium setup
+# -----------------------
 options = Options()
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
@@ -78,12 +103,9 @@ for site in SITES:
 driver.quit()
 
 # Испрати Telegram пораки ако има резултати
-if TOKEN and CHAT_ID and results:
+if results:
     for r in results:
         message = f"{r['title']}\nЦена: {r['price']}\n{r['link']}"
-        requests.post(
-            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": message}
-        )
+        send_telegram(message)
 
 print(f"\nScraper finished. Total ads found in last 24h: {len(results)}")
